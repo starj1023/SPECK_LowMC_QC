@@ -7,11 +7,16 @@ from Matrix import Matrix_key, RC, Matrix_round
 def LM(eng):
     
     k = eng.allocate_qureg(128)
+    k1 = eng.allocate_qureg(128)
     x = eng.allocate_qureg(128)
-    Round_constant_XOR(eng, k, 0xFFD5, 128)
-    Round_constant_XOR(eng, x, 0xFFFF, 128)
+
+    if(resource_check!= 1):
+        Round_constant_XOR(eng, k, 0xFFD5, 128)
+        Round_constant_XOR(eng, k1, 0xFFD5, 128)
+        Round_constant_XOR(eng, x, 0xFFFF, 128)
 
     s = eng.allocate_qureg(128)
+    s1 = eng.allocate_qureg(128)
     temp = eng.allocate_qureg(30)
 
     with Compute(eng):
@@ -26,14 +31,10 @@ def LM(eng):
     #Round start
     for p in range(20):
         print('Round', p+1)
-        print('Before SubBytes')
-        print_state(eng, x, 32)
         if(shallow):
             Sbox10_shallow(eng, x, temp)
         else:
             Sbox10(eng, x)
-        print('After SubBytes')
-        print_state(eng, x, 32)
         round_s = eng.allocate_qureg(128)
 
         for i in range(128):
@@ -42,29 +43,34 @@ def LM(eng):
                     CNOT | (x[j], round_s[i])
 
         x = round_s
-        print('After Linear layer')
-        print_state(eng, x, 32)
-
-        print('After Constant addition')
         Round_constant_XOR(eng, x, RC[p], 128)
-        print_state(eng, x, 32)
-        print_state(eng, s, 32)
 
         #Key schedule & AddRoundkey
-        with Compute(eng):
-            for i in range(128):
-                for j in range(128):
-                    if((Matrix_key[p+1][i] >> j) & 1):
-                        CNOT | (k[j], s[i])
+        if(p%2 == 0):
+            with Compute(eng):
+                for i in range(128):
+                    for j in range(128):
+                        if ((Matrix_key[p + 1][i] >> j) & 1):
+                            CNOT | (k1[j], s1[i])
+            CNOT128(eng, s1, x)
+            if(p!= 18):
+                Uncompute(eng)
+        else:
+            with Compute(eng):
+                for i in range(128):
+                    for j in range(128):
+                        if ((Matrix_key[p + 1][i] >> j) & 1):
+                            CNOT | (k[j], s[i])
+            CNOT128(eng, s, x)
+            if(p!= 19):
+                Uncompute(eng)
 
-        CNOT128(eng, s, x)
-        if(p!= 19):
-            Uncompute(eng)
-        
-        print('After AddRoundkey')
+    if(resource_check != 1):
         print_state(eng, x, 32)
 
-def Sbox_shallow(eng, x, temp, s):
+def Sbox_shallow(eng, x, temp):
+
+    s = eng.allocate_qureg(3)
 
     CNOT | (x[2], temp[2])
     CNOT | (x[1], temp[1])
@@ -182,7 +188,7 @@ print(Resource)
 print('\n')
 eng.flush()
 
-'''
+
 print('Shallow version')
 resource_check = 0
 shallow = 1
@@ -198,4 +204,3 @@ LM(eng)
 print(Resource)
 print('\n')
 eng.flush()
-'''
